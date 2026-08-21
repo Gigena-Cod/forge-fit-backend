@@ -1,0 +1,3 @@
+import { MemberModel } from './member.model.js'
+import { objectId } from '../../shared/utils/mongo.js'
+export const memberRepository = { findAllByGymId: (gymId: string) => MemberModel.find({ gymId: objectId(gymId) }).lean(), findByIdAndGymId: (id: string, gymId: string) => MemberModel.findOne({ _id: objectId(id), gymId: objectId(gymId) }).lean(), create: (gymId: string, data: any) => MemberModel.create({ ...data, gymId: objectId(gymId) }), update: (id: string, gymId: string, data: any) => MemberModel.findOneAndUpdate({ _id: objectId(id), gymId: objectId(gymId) }, data, { new: true }).lean(), delete: (id: string, gymId: string) => MemberModel.findOneAndDelete({ _id: objectId(id), gymId: objectId(gymId) }).lean() }

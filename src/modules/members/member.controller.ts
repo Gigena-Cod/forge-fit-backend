@@ -1,0 +1,5 @@
+import type { RequestHandler } from 'express'
+import { z } from 'zod'
+import { memberService } from './member.service.js'
+const schema = z.object({ name: z.string().min(1), dni: z.string().min(1), birthDate: z.string().date().nullable().optional(), phone: z.string().min(1), email: z.string().email(), registrationDate: z.string().date(), membershipStatus: z.enum(['ACTIVE', 'INACTIVE']) })
+export const memberController = { list: (async (req, res) => res.json({ data: await memberService.list(req.auth!.gymId) })) as RequestHandler, get: (async (req, res) => res.json({ data: await memberService.get(String(req.params.id), req.auth!.gymId) })) as RequestHandler, create: (async (req, res) => res.status(201).json({ data: await memberService.create(req.auth!.gymId, schema.parse(req.body)) })) as RequestHandler, update: (async (req, res) => res.json({ data: await memberService.update(String(req.params.id), req.auth!.gymId, schema.parse(req.body)) })) as RequestHandler, remove: (async (req, res) => { await memberService.remove(String(req.params.id), req.auth!.gymId); res.status(204).send() }) as RequestHandler }

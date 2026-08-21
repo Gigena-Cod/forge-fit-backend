@@ -1,0 +1,4 @@
+import mongoose from 'mongoose'
+import { GymModel } from '../gyms/gym.model.js'
+import { UserModel } from './user.model.js'
+export const authRepository = { findByEmail: (email: string) => UserModel.findOne({ email }).populate('gymId').exec(), findById: (id: string) => UserModel.findById(id).populate('gymId').exec(), async createGymAndOwner(data: { gym: { name: string; address: string; phone: string; contactEmail: string }; administrator: { fullName: string; dni: string; phone: string; email: string; passwordHash: string } }) { const session = await mongoose.startSession(); try { let result: { user: any; gym: any } | undefined; await session.withTransaction(async () => { const [gym] = await GymModel.create([data.gym], { session }); const [user] = await UserModel.create([{ ...data.administrator, gymId: gym._id, role: 'OWNER' }], { session }); result = { user, gym } }); return result! } finally { await session.endSession() } } }
