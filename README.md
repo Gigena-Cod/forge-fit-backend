@@ -21,3 +21,19 @@ El seed crea `admin@apex.test` con contraseña `password123` solo para desarroll
 - `GET` / `PUT /api/settings`
 
 Las respuestas usan `{ "data": ... }`; los errores usan `{ "error": { "code", "message" } }`.
+
+## Pruebas
+
+```powershell
+pnpm test                  # Unitarias e integración
+pnpm test:unit             # Solo unitarias, sin MongoDB
+pnpm test:integration      # HTTP real con MongoDB temporal
+pnpm test:typecheck        # Tipos de las pruebas y configuración
+pnpm build
+```
+
+Las pruebas de integración arrancan un replica set local temporal con base aleatoria, independiente del `.env` y de la base de desarrollo. Supertest llama a la aplicación Express sin iniciar el servidor de desarrollo. Cada caso limpia sus documentos y conserva los índices; al terminar se detiene MongoDB.
+
+La primera ejecución requiere descargar MongoDB 8.2.6 (o durante la instalación); después se reutiliza la caché. No hace falta Docker ni ejecutar el seed. Las fábricas de `tests/support/fixtures.ts` generan gimnasios, usuarios de los tres roles, socios, pagos, asistencias y JWT exclusivos de prueba.
+
+Ver alcance y guía de extensión en [SDD-00 Base de pruebas de integración](docs/specs/00-base-pruebas-integracion.md).

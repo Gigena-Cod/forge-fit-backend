@@ -1,3 +1,4 @@
 import type { RequestHandler } from 'express'
-import { attendanceService } from './attendance.service.js'
-export const attendanceController = { list: (async (req, res) => res.json({ data: await attendanceService.list(req.auth!.gymId) })) as RequestHandler, listByMember: (async (req, res) => res.json({ data: await attendanceService.listByMember(String(req.params.memberId), req.auth!.gymId) })) as RequestHandler }
+import { attendanceService } from './attendance.service.js'; import { z } from 'zod'
+const checkSchema=z.object({qrPayload:z.string().min(10),requestId:z.string().uuid()})
+export const attendanceController = { list: (async (req, res) => res.json({ data: await attendanceService.list(req.auth!.gymId) })) as RequestHandler, listByMember: (async (req, res) => res.json({ data: await attendanceService.listByMember(String(req.params.memberId), req.auth!.gymId) })) as RequestHandler, accessStatus:(async(req,res)=>res.json({data:await attendanceService.accessStatus(String(req.params.id),req.auth!.gymId)})) as RequestHandler, checkIn:(async(req,res)=>{const result=await attendanceService.checkIn(checkSchema.parse(req.body).qrPayload,checkSchema.parse(req.body).requestId,req.auth!.gymId); res.status(result.allowed?201:200).json({data:result})}) as RequestHandler }
