@@ -91,6 +91,11 @@ describe('HTTP: endpoints que completan ForgeFit', () => {
     const first = await request(app).post('/api/attendance/check-in').auth(scenario.tokens.receptionist, { type: 'bearer' }).send({ qrPayload: qr, requestId }).expect(201)
     const retry = await request(app).post('/api/attendance/check-in').auth(scenario.tokens.receptionist, { type: 'bearer' }).send({ qrPayload: qr, requestId }).expect(201)
     expect(first.body.data.attendance._id).toBe(retry.body.data.attendance._id)
+    expect(first.body.data).toMatchObject({
+      member: { id: scenario.member.id, name: scenario.member.name, dni: scenario.member.dni, membershipStatus: 'ACTIVE' },
+      payment: { period: '2026-09', status: 'PAID' },
+    })
+    expect(retry.body.data.member).toEqual(first.body.data.member)
     expect(retry.body.data.replayed).toBe(true)
     expect(await AttendanceModel.countDocuments({ memberId: scenario.member._id, requestId })).toBe(1)
   })
@@ -106,6 +111,12 @@ describe('HTTP: endpoints que completan ForgeFit', () => {
     if (reason === 'PAYMENT_MISSING') await PaymentModel.deleteMany({ memberId: scenario.member._id })
     const result = await request(app).post('/api/attendance/check-in').auth(scenario.tokens.receptionist, { type: 'bearer' }).send({ qrPayload: qr, requestId: randomUUID() }).expect(200)
     expect(result.body.data).toMatchObject({ allowed: false, reason, attendance: null })
+    if (suppliedQr) {
+      expect(result.body.data.member).toBeNull()
+    } else {
+      expect(result.body.data.member).toMatchObject({ id: scenario.member.id, name: scenario.member.name })
+      expect(result.body.data.payment.period).toBe('2026-09')
+    }
   })
 
   it('administra usuarios, limita creación al owner y protege el último owner', async () => {
