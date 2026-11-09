@@ -19,7 +19,9 @@ describe('HTTP: autenticación real', () => {
     expect(result.body.data.user.role).toBe('OWNER')
     expect(await GymModel.countDocuments()).toBe(1)
     expect(await UserModel.countDocuments()).toBe(1)
-    const profile = await request(app).get('/api/auth/me').auth(result.body.data.token, { type: 'bearer' }).expect(200)
+    expect(result.body.data).not.toHaveProperty('token')
+    expect(result.headers['set-cookie'].join(';')).toContain('HttpOnly')
+    const profile = await request(app).get('/api/auth/me').set('Cookie', result.headers['set-cookie']).expect(200)
     expect(profile.body.data.gym.id).toBe(result.body.data.gym.id)
     expect(profile.body.data.user).not.toHaveProperty('passwordHash')
   })
@@ -28,7 +30,8 @@ describe('HTTP: autenticación real', () => {
     const gym = await createGym()
     const user = await createUser(gym._id, role)
     const login = await request(app).post('/api/auth/login').send({ email: user.email, password: fixturePassword }).expect(200)
-    const profile = await request(app).get('/api/auth/me').auth(login.body.data.token, { type: 'bearer' }).expect(200)
+    expect(login.body.data).not.toHaveProperty('token')
+    const profile = await request(app).get('/api/auth/me').set('Cookie', login.headers['set-cookie']).expect(200)
     expect(profile.body.data.user).toMatchObject({ id: user.id, role })
   })
 
@@ -54,5 +57,17 @@ describe('HTTP: autenticación real', () => {
   it('rechaza solicitudes sin JWT o con JWT inválido', async () => {
     await request(app).get('/api/members').expect(401)
     await request(app).get('/api/members').auth('invalid-token', { type: 'bearer' }).expect(401)
+  })
+
+  it('rota cookies en refresh, rechaza reutilización y permite logout', async () => {
+    const user = await createUser((await createGym())._id)
+    const agent = request.agent(app)
+    const login = await agent.post('/api/auth/login').send({ email: user.email, password: fixturePassword }).expect(200)
+    const sessionId = (await agent.get('/api/auth/me').expect(200)).body.data.sessionId
+    const previousRefresh = login.headers['set-cookie'].find((cookie: string) => cookie.startsWith('ff_refresh='))!
+    await agent.post('/api/auth/refresh').set('X-Session-Id', sessionId).expect(204)
+    await request(app).post('/api/auth/refresh').set('Cookie', previousRefresh).set('X-Session-Id', sessionId).expect(401).expect(({ body }) => expect(body.error.code).toBe('SESSION_EXPIRED'))
+    await agent.get('/api/auth/me').expect(401)
+    await agent.post('/api/auth/logout').expect(204)
   })
 })

@@ -12,7 +12,7 @@ import { roleRouter } from './modules/roles/role.routes.js'
 import { reportRouter } from './modules/reports/report.routes.js'
 import { errorMiddleware, notFoundMiddleware } from './shared/middleware/error.middleware.js'
 export const app = express()
-app.use(cors({ origin: env.FRONTEND_URL }))
+app.use(cors({ origin: env.FRONTEND_URL, credentials: true }))
 app.use(express.json())
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 // Express 5 forwards rejected promises to the error middleware.

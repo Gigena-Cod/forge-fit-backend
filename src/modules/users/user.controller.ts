@@ -7,9 +7,10 @@ import { AppError } from '../../shared/errors/AppError.js'
 
 const createSchema = z.object({ fullName: z.string().min(1), dni: z.string().min(1), phone: z.string().min(1), email: z.string().email(), password: z.string().min(8), role: z.enum(['ADMIN', 'RECEPTIONIST']) })
 const updateSchema = z.object({ fullName: z.string().min(1).optional(), dni: z.string().min(1).optional(), phone: z.string().min(1).optional(), email: z.string().email().optional(), role: z.enum(['ADMIN', 'RECEPTIONIST']).optional(), accountStatus: z.enum(['ACTIVE', 'INACTIVE']).optional() }).refine(value => Object.keys(value).length > 0)
+const pageSchema=z.object({page:z.coerce.number().int().min(1).default(1),limit:z.coerce.number().int().min(1).max(100).default(20),q:z.string().optional()}).strict()
 
 export const userController = {
-  list: (async (req, res) => res.json({ data: await authRepository.listByGym(req.auth!.gymId) })) as RequestHandler,
+  list: (async (req, res) => {if(!('page' in req.query||'limit' in req.query))return res.json({data:await authRepository.listByGym(req.auth!.gymId)});const q=pageSchema.parse(req.query);const r=await authRepository.listPageByGym(req.auth!.gymId,q.page,q.limit,q.q);return res.json({data:{...r,page:q.page,limit:q.limit}})}) as RequestHandler,
   get: (async (req, res) => { const user = await authRepository.findByIdAndGym(String(req.params.id), req.auth!.gymId); if (!user) throw new AppError('USER_NOT_FOUND', 404, 'User not found'); res.json({ data: user }) }) as RequestHandler,
   create: (async (req, res) => { const input = createSchema.parse(req.body); if (await authRepository.findByEmail(input.email)) throw new AppError('EMAIL_ALREADY_EXISTS', 409, 'Email already exists'); const { password, ...data } = input; const user = await authRepository.createInGym(req.auth!.gymId, { ...data, passwordHash: await bcrypt.hash(password, 12) }); const { passwordHash: _passwordHash, ...safe } = user.toObject(); res.status(201).json({ data: safe }) }) as RequestHandler,
   update: (async (req, res) => {
