@@ -9,6 +9,10 @@ const map = (document: any) => mapDocument(document)
 
 export const paymentService = {
   async list(gymId: string) { return (await paymentRepository.findAllByGymId(gymId)).map(map) },
+  async listPage(gymId: string, page: number, limit: number, q?: string) {
+    const result = await paymentRepository.findPageByGymId(gymId, page, limit, q)
+    return { items: result.items.map(map), page, limit, total: result.total }
+  },
   async get(id: string, gymId: string) { const payment = await paymentRepository.findByIdAndGymId(id, gymId); if (!payment) throw new AppError('PAYMENT_NOT_FOUND', 404, 'Payment not found'); return map(payment) },
   async listByMember(memberId: string, gymId: string) { if (!await memberRepository.findByIdAndGymId(memberId, gymId)) throw new AppError('MEMBER_NOT_FOUND', 404, 'Member not found'); return (await paymentRepository.findByMember(memberId, gymId)).map(map) },
   async create(gymId: string, input: Input) { if (!await memberRepository.findByIdAndGymId(input.memberId, gymId)) throw new AppError('MEMBER_NOT_FOUND', 404, 'Member not found'); return map((await paymentRepository.create(gymId, data(input))).toObject()) },
