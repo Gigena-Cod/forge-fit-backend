@@ -1,16 +1,22 @@
 import { randomUUID } from 'node:crypto'
 import request from 'supertest'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { app } from '../../src/app.js'
 import { AttendanceModel } from '../../src/modules/attendance/attendance.model.js'
 import { MemberModel } from '../../src/modules/members/member.model.js'
 import { PaymentModel } from '../../src/modules/payments/payment.model.js'
 import { UserModel } from '../../src/modules/auth/user.model.js'
-import { createGymScenario, createMember, createPayment, memberBody } from '../support/fixtures.js'
+import { createGym, createGymScenario, createMember, createPayment, memberBody } from '../support/fixtures.js'
 
 describe('HTTP: endpoints que completan ForgeFit', () => {
   let scenario: Awaited<ReturnType<typeof createGymScenario>>
-  beforeEach(async () => { scenario = await createGymScenario() })
+  beforeEach(async () => {
+    // Evaluate access in the same month as the scenario's payment.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-15T12:00:00Z'))
+    scenario = await createGymScenario()
+  })
+  afterEach(() => { vi.useRealTimers() })
 
   it('cambia el estado de un socio sin borrar su historial', async () => {
     await request(app).patch(`/api/members/${scenario.member.id}/status`).auth(scenario.tokens.admin, { type: 'bearer' }).send({ membershipStatus: 'INACTIVE' }).expect(200)
@@ -40,10 +46,43 @@ describe('HTTP: endpoints que completan ForgeFit', () => {
     const issued = await request(app).post(`/api/members/${scenario.member.id}/qr`).auth(scenario.tokens.owner, { type: 'bearer' }).send({}).expect(201)
     expect(issued.body.data.qrPayload).toMatch(/^ffq_v1_/)
     expect(issued.body.data.qrPayload).not.toContain(scenario.member.dni)
+    expect(issued.headers['cache-control']).toBe('no-store')
+    expect(issued.body.data.issuedAt).toMatch(/^2026-09-15T12:00:00\.000Z$/)
     const read = await request(app).get(`/api/members/${scenario.member.id}/qr`).auth(scenario.tokens.admin, { type: 'bearer' }).expect(200)
     expect(read.body.data.qrPayload).toBe(issued.body.data.qrPayload)
+    expect(read.body.data.issuedAt).toBe(issued.body.data.issuedAt)
+    expect(read.headers['cache-control']).toBe('no-store')
     const rotated = await request(app).post(`/api/members/${scenario.member.id}/qr`).auth(scenario.tokens.owner, { type: 'bearer' }).send({ rotate: true }).expect(201)
     expect(rotated.body.data.qrPayload).not.toBe(issued.body.data.qrPayload)
+  })
+
+  it('emite una sola credencial ante emisiones iniciales concurrentes', async () => {
+    const member = await createMember(scenario.gym._id)
+    const responses = await Promise.all(Array.from({ length: 8 }, () =>
+      request(app).post(`/api/members/${member.id}/qr`).auth(scenario.tokens.owner, { type: 'bearer' }).send({}).expect(201),
+    ))
+    const payloads = new Set(responses.map(response => response.body.data.qrPayload))
+    const issuedAt = new Set(responses.map(response => response.body.data.issuedAt))
+    expect(payloads.size).toBe(1)
+    expect(issuedAt.size).toBe(1)
+    const stored = await MemberModel.findById(member._id).select('+qrPayload +qrDigest').lean()
+    expect(stored?.qrPayload).toBe(responses[0].body.data.qrPayload)
+  })
+
+  it('protege la credencial QR y distingue las dos ausencias', async () => {
+    await request(app).get(`/api/members/${scenario.member.id}/qr`).expect(401)
+    await request(app).get(`/api/members/${scenario.member.id}/qr`).auth(scenario.tokens.receptionist, { type: 'bearer' }).expect(403)
+    await request(app).get(`/api/members/${scenario.member.id}/qr`).auth(scenario.tokens.owner, { type: 'bearer' }).expect(404).expect({ error: { code: 'QR_NOT_ASSIGNED', message: 'QR not assigned' } })
+    const otherGym = await createGym()
+    const otherMember = await createMember(otherGym._id)
+    await request(app).get(`/api/members/${otherMember.id}/qr`).auth(scenario.tokens.owner, { type: 'bearer' }).expect(404).expect({ error: { code: 'MEMBER_NOT_FOUND', message: 'Member not found' } })
+  })
+
+  it('invalida el QR previo al rotarlo y acepta el nuevo', async () => {
+    const original = (await request(app).post(`/api/members/${scenario.member.id}/qr`).auth(scenario.tokens.owner, { type: 'bearer' }).send({}).expect(201)).body.data.qrPayload
+    const replacement = (await request(app).post(`/api/members/${scenario.member.id}/qr`).auth(scenario.tokens.owner, { type: 'bearer' }).send({ rotate: true }).expect(201)).body.data.qrPayload
+    await request(app).post('/api/attendance/check-in').auth(scenario.tokens.receptionist, { type: 'bearer' }).send({ qrPayload: original, requestId: randomUUID() }).expect(200).expect(({ body }) => expect(body.data.reason).toBe('QR_INVALID'))
+    await request(app).post('/api/attendance/check-in').auth(scenario.tokens.receptionist, { type: 'bearer' }).send({ qrPayload: replacement, requestId: randomUUID() }).expect(201)
   })
 
   it('registra check-in una vez y recupera el mismo resultado en reintento', async () => {
