@@ -21,6 +21,7 @@ const currentPeriod = (date = new Date()) => {
 
 export const attendanceService = {
   list: (gymId: string) => attendanceRepository.findAllByGymId(gymId),
+  async listPage(gymId: string, page: number, limit: number, memberId?: string, q?: string) { if (memberId && !await memberRepository.findByIdAndGymId(memberId, gymId)) throw new AppError('MEMBER_NOT_FOUND', 404, 'Member not found'); const result = await attendanceRepository.findPage(gymId, page, limit, memberId, q); return { ...result, page, limit } },
   async listByMember(memberId: string, gymId: string) {
     if (!await memberRepository.findByIdAndGymId(memberId, gymId)) throw new AppError('MEMBER_NOT_FOUND', 404, 'Member not found')
     return attendanceRepository.findByMember(memberId, gymId)

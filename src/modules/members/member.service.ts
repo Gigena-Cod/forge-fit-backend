@@ -16,6 +16,7 @@ const newQr = () => {
 
 export const memberService = {
   async list(gymId: string) { return (await memberRepository.findAllByGymId(gymId)).map(map) },
+  async listPage(gymId: string, page: number, limit: number, q?: string) { const result = await memberRepository.findPageByGymId(gymId, page, limit, q); return { items: result.items.map(map), page, limit, total: result.total } },
   async get(id: string, gymId: string) {
     const member = await memberRepository.findByIdAndGymId(id, gymId)
     if (!member) throw new AppError('MEMBER_NOT_FOUND', 404, 'Member not found')

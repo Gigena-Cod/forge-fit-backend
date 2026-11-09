@@ -67,6 +67,7 @@ export const paymentRepository = {
   },
   findByIdAndGymId: (id: string, gymId: string) => PaymentModel.findOne({ _id: objectId(id), gymId: objectId(gymId) }).lean(),
   findByMember: (memberId: string, gymId: string) => PaymentModel.find({ memberId: objectId(memberId), gymId: objectId(gymId), recordStatus: active }).lean(),
+  async findPageByMember(memberId:string,gymId:string,page:number,limit:number,period?:string){const filter:any={memberId:objectId(memberId),gymId:objectId(gymId),recordStatus:active,...(period?{period}:{})};const [items,total]=await Promise.all([PaymentModel.find(filter).sort({paymentDate:-1,createdAt:-1,_id:-1}).skip((page-1)*limit).limit(limit).lean(),PaymentModel.countDocuments(filter)]);return{items,total}},
   findForPeriod: (memberId: string, gymId: string, period: string) => PaymentModel.find({ memberId: objectId(memberId), gymId: objectId(gymId), period, recordStatus: active }).lean(),
   create: (gymId: string, data: any) => PaymentModel.create({ ...data, gymId: objectId(gymId), memberId: objectId(data.memberId), recordStatus: 'ACTIVE' }),
   update: (id: string, gymId: string, data: any) => PaymentModel.findOneAndUpdate({ _id: objectId(id), gymId: objectId(gymId), recordStatus: active }, { ...data, memberId: objectId(data.memberId) }, { new: true, runValidators: true }).lean(),
